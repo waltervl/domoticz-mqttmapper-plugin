@@ -230,10 +230,19 @@
 		console.error('Fout bij laden data:', err);
 	  });
 		
-
+	function buildTypeOptions() {
+      typeOptionsHtml = '<option value="">Select device type…</option>';
+      //logDebug(`buildTypeOptions() aangeroepen with data=${JSON.stringify(domoticzDTypes)}`);
+      logDebug(`buildTypeOptions() aangeroepen`);
+      Object.entries(domoticzDTypes).forEach(([id, def]) => {
+        typeOptionsHtml +=
+          `<option value="${id}">${def.typeName}/${def.subTypeName} (${id})</option>`;
+      });
+    }
 
     // Build entries from example.json
     function buildFromMapping() {
+	  logDebug(`buildFromMapping() aangeroepen`);
       Object.entries(mappingJson).forEach(([name, def]) => {
         // 1) automatisch het topic toevoegen
         if (!topicsSet.has(def.topic)) {
@@ -353,6 +362,7 @@
 	  } 
 	  if (data.dtype) {
 		const syntheticType = `${data.dtype}/${data.subtype}`;
+		typeSel.value = syntheticType;
 		logDebug(`call fillTypeFields() for dtype`);
 		fillTypeFields(div, syntheticType);
 	  }
