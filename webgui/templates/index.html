@@ -33,10 +33,34 @@
       font-family: monospace;
       font-size: 0.9rem;
     }
-    /* Alle readonly inputs lichtgrijs maken */
+    /* Alle  readonly inputs lichtgrijs maken */
     input[readonly] {
          background-color: #eee;
          }
+    /* Header en toggle-knop */
+	.entry-header {
+	display: flex;
+	align-items: center;
+	background: #f9f9f9;
+	padding: 0.5rem;
+	border-bottom: 1px solid #ddd;
+	cursor: pointer;
+	}
+
+	.toggleEntryBtn {
+	font-size: 1.2rem;
+	margin-right: 0.5rem;
+	}
+
+	/* Bij collapsed: verberg alle velden behalve de Naam */
+	.entry.collapsed .entry-body {
+	display: none;
+	}
+
+	/* Optioneel: draai het icoon bij collapsed */
+	.entry.collapsed .toggleEntryBtn {
+	transform: rotate(-90deg);
+	}
 
   </style>
 </head>
@@ -76,8 +100,8 @@
 
   <h2>Result JSON</h2>
   <pre id="output">{ }</pre>
+	<script>
 
-  <script>
 	// Debug‐helpers
     const debugToggle = document.getElementById('debugToggle');
     const debugLogEl  = document.getElementById('debugLog');
@@ -104,6 +128,7 @@
     }
     // Globale state
     let domoticzDTypes = {};
+    let mappingJson = {};
     let typeOptionsHtml = '';
     let entryCount = 0;
     const topicsSet = new Set();
@@ -160,46 +185,56 @@
       msgList.appendChild(li);
       msgList.scrollTop = msgList.scrollHeight;
     }
-
-    fetch('{{ url_for("project_assets", filename="DomoticzTypes.json") }}') 
-      .then(r => r.json()) 
-      .then(json => { domoticzDTypes = json.definitions; buildTypeOptions(); }) 
-      .catch(err => console.error('Fout bij laden types:', err));
-
-     let exampleJson = null;
-    fetch('{{ url_for("project_assets", filename="example.json") }}')
-     .then(r => {
-      if (!r.ok) {
-        // bestand bestaat niet of 404
-        logDebug(`Geen example.json gevonden (status ${r.status})`);
-        return null;
-       }
-      return r.json();
-     })
-    .then(json => {
-      exampleJson = json;
-      logDebug(`exampleJson met data=${JSON.stringify(exampleJson)}`);
-      if (exampleJson) {
-        buildFromExample(exampleJson);
-      }
-    })
-    .catch(err => {
-      logDebug(`Fout bij laden example.json: ${err}`);
-    });
-
-
-    // build the <option> list for Domoticz‐types
-    function buildTypeOptions() {
-      typeOptionsHtml = '<option value="">Select device type…</option>';
-      logDebug(`buildTypeOptions() aangeroepen with data=${JSON.stringify(domoticzDTypes)}`);
-      Object.entries(domoticzDTypes).forEach(([id, def]) => {
-        typeOptionsHtml +=
-          `<option value="${id}">${def.typeName}/${def.subTypeName} (${id})</option>`;
-      });
+    // Helper: vul nValue & sValue op basis van gekozen type ID
+    function fillTypeFields(container, typeId) {
+	  logDebug(`fillTypeFields() aangeroepen with typeId=${typeId}`);
+      const def = domoticzDTypes[typeId] || {};
+      const dtp = container.querySelector('input[name="dtype"]');
+      const stp = container.querySelector('input[name="subtype"]');
+      const nIn = container.querySelector('input[name="nValue"]');
+      const sIn = container.querySelector('input[name="sValue"]');
+      parts  = typeId.split('/');
+      
+      nIn.value = def.nValue && Object.keys(def.nValue).length
+        ? JSON.stringify(def.nValue) : 'not specified';
+      sIn.value = def.sValue && Object.keys(def.sValue).length
+        ? JSON.stringify(def.sValue) : 'not specified';
+      dtp.value =  parts[0];
+      stp.value =  parts[1];
+        
     }
+        
+	fetch('{{ url_for("project_assets", filename="DomoticzTypes.json") }}')
+	  .then(r => r.json())
+	  .then(json => {
+		domoticzDTypes   = json.definitions;
+		buildTypeOptions();
+		// pas na buildTypeOptions example.json ophalen
+		return fetch('{{ url_for("project_assets", filename="example.json") }}');
+	  })
+	  .then(r => {
+		if (!r) return null;         // in geval van mislukte types-fetch
+		if (!r.ok) {
+		  logDebug(`Geen example.json gevonden (status ${r.status})`);
+		  return null;
+		}
+		return r.json();
+	  })
+	  .then(mappingData => {
+		if (mappingData) {
+		  mappingJson = mappingData;
+		  buildFromMapping();
+		}
+	  })
+	  .catch(err => {
+		console.error('Fout bij laden data:', err);
+	  });
+		
+
+
     // Build entries from example.json
-    function buildFromExample(exampleJson) {
-      Object.entries(exampleJson).forEach(([name, def]) => {
+    function buildFromMapping() {
+      Object.entries(mappingJson).forEach(([name, def]) => {
         // 1) automatisch het topic toevoegen
         if (!topicsSet.has(def.topic)) {
           addTopicOption(def.topic);
@@ -227,127 +262,114 @@
       enableButtons();
     }
 
-    // Maak en voeg een nieuwe mapping-entry toe; optioneel initial data
-    function createEntry(data = {}) {
-      //logDebug(`createEntry() aangeroepen with data=${JSON.stringify(data)}`);
-      entryCount++;
-      const div = document.createElement('div');
-      div.className = 'entry';
+	function createEntry(data = {}) {
+	  entryCount++;
+	  const div = document.createElement('div');
+	  div.className = 'entry';
 
-      // Kopieer topic-options
-      const topicOptionsHtml = topicSel.innerHTML;
+	  // Template met header + body wrapper
+	  div.innerHTML = `
+		<div class="entry-header">
+		  <span class="toggleEntryBtn">⯆</span>
+		  <h3>Entry ${entryCount}</h3>
+		  <!-- Naam blijft altijd zichtbaar -->
+		  <label style="margin-left:auto;">
+			Naam
+			<input type="text" name="name" required value="${data.name||''}">
+		  </label>
+		  <button class="removeEntryBtn" type="button">&times;</button>
+		</div>
+		<div class="entry-body">
+		  <label>
+			Topic
+			<select name="topic" required>${topicSel.innerHTML}</select>
+		  </label>
+		  <label>
+			Last Payload
+			<input type="text" name="latestPayload" readonly placeholder="wait for new message">
+		  </label>
+		  <label>
+			Type
+			<select name="type" required>${typeOptionsHtml}</select>
+		  </label>
+		  <div>
+			<label style="display:inline-block">
+			  dtype <input type="text" name="dtype" readonly style="width:40px" value="${data.dtype||''}">
+			</label>
+			<label style="display:inline-block">
+			  subtype <input type="text" name="subtype" readonly style="width:40px" value="${data.subtype||''}">
+			</label>
+			<label style="display:inline-block">
+			  switchtype <input type="text" name="switchtype" style="width:40px" value="${data.switchtype||''}">
+			</label>
+		  </div>
+		  <label>
+			options (json)
+			<input type="text" name="options" value="${data.options||''}">
+		  </label>
+		  <label>
+			set (json)
+			<input type="text" name="set" value="${data.set||''}">
+		  </label>
+		  <label>
+			nValue (numeric)
+			<input type="text" name="nValue" readonly>
+		  </label>
+		  <label>
+			sValue (string)
+			<input type="text" name="sValue" readonly>
+		  </label>
+		  <label>
+			Mapping (payload-pad)
+			<input type="text" name="mapping" required placeholder='example: {"item":"value"}' value="${data.mapping||''}">
+		  </label>
+		</div>
+	  `;
 
-      div.innerHTML = `
-        <h3>Entry ${entryCount}</h3>
-        <button class="removeEntryBtn" type="button">&#10005;</button>
+	  // Event listener voor verwijderknop
+	  div.querySelector('.removeEntryBtn').addEventListener('click', () => div.remove());
 
-        <label>Topic
-          <select name="topic" required>${topicOptionsHtml}</select>
-        </label>
+	  // Zet default topic als meegegeven
+	  if (data.topic) {
+		div.querySelector('select[name="topic"]').value = data.topic;
+	  }
 
-        <label>Last Payload
-          <input type="text" name="latestPayload" readonly placeholder="wait for new message">
-        </label>
+	  // Toggle collapse/expand
+	  const header = div.querySelector('.entry-header');
+	  const toggleBtn = header.querySelector('.toggleEntryBtn');
+	  header.addEventListener('click', () => {
+		div.classList.toggle('collapsed');
+		// Pijltje omdraaien
+		toggleBtn.textContent = div.classList.contains('collapsed') ? '-' : '+';
+	  });
 
-        <label>Naam
-          <input type="text" name="name" required value="${data.name||''}">
-        </label>
+	  // Type-keuze event en voorvullen
+	  const typeSel = div.querySelector('select[name="type"]');
+	  typeSel.addEventListener('change', e => fillTypeFields(div, e.target.value));
+	  if (data.type) {
+		typeSel.value = data.type;
+		logDebug(`call fillTypeFields() for Type`);
+		fillTypeFields(div, data.type);
+	  } 
+	  if (data.dtype) {
+		const syntheticType = `${data.dtype}/${data.subtype}`;
+		logDebug(`call fillTypeFields() for dtype`);
+		fillTypeFields(div, syntheticType);
+	  }
 
-        <label>Type
-          <select name="type" required>${typeOptionsHtml}</select>
-        </label>
-        <div >
-        <label style="display: inline-block">dtype
-          <input type="text" name="dtype" readonly value="${data.dtype||''}" style="width:40px">
-        </label>
-        </label>
-        <label style="display: inline-block">subtype
-          <input type="text" name="subtype" readonly value="${data.subtype||''}" style="width:40px">
-        </label>
-        </label>
-        <label style="display: inline-block">switchtype
-          <input type="text" name="switchtype" value="${data.switchtype||''}" style="width:40px">
-        </label>
-        </div>
-        <label>options (json)
-          <input type="text" name="options" value="${data.options||''}">
-        </label>        
-        <label>set (json)
-          <input type="text" name="options" value="${data.set||''}">
-        </label>   
-        <label>nValue (numeric)
-          <input type="text" name="nValue" readonly>
-        </label>
-        <label>sValue (string)
-          <input type="text" name="sValue" readonly>
-        </label>
+	  // Plaats voor de Add entry-knop
+	  mappingSec.insertBefore(div, addBtn);
+	  return div;
+	}
 
-        <label>Mapping (payload-pad)
-          <input type="text" name="mapping" placeholder='example: {"item":"value"}' required
-                 value="${data.mapping||''}">
-        </label>
-      `;
-      // Verwijder-knop
-      div.querySelector('.removeEntryBtn')
-         .addEventListener('click', () => div.remove());
 
-      // Set topic als er een default is
-      if (data.topic) {
-        div.querySelector('select[name="topic"]').value = data.topic;
-      }
-      // Bij type-keuze: toon nValue & sValue
-      div.querySelector('select[name="type"]')
-         .addEventListener('change', e => fillTypeFields(div, e.target.value));
 
-      // Als er al een type in data zat, trigger fill
-      if (data.type) {
-        const sel = div.querySelector('select[name="type"]');
-        sel.value = data.type;
-        fillTypeFields(div, data.type);
-      }
-      if (data.dtype) {
-        const sel2 = div.querySelector('select[name="type"]');
-        sel2.value = data.dtype+'/'+data.subtype;
-      }
-      // get type from dtype and subtype, trigger fill
-      if (data.dtype) {
-        //const sel = div.querySelector('select[name="type"]');
-        //sel.value = data.type;
-        stypeid = data.dtype+'/'+data.subtype
-        fillTypeFields(div, stypeid);
-      }
-
-      // Voeg vóór de "Add entry"-knop in
-      mappingSec.insertBefore(div, addBtn);
-      return div;
-    }
-
-    // Helper: vul nValue & sValue op basis van gekozen type ID
-    function fillTypeFields(container, typeId) {
-	  logDebug(`fillTypeFields() aangeroepen with typeId=${typeId}`);
-      const def = domoticzDTypes[typeId] || {};
-      const dtp = container.querySelector('input[name="dtype"]');
-      const stp = container.querySelector('input[name="subtype"]');
-      const nIn = container.querySelector('input[name="nValue"]');
-      const sIn = container.querySelector('input[name="sValue"]');
-      parts  = typeId.split('/');
-      
-      nIn.value = def.nValue && Object.keys(def.nValue).length
-        ? JSON.stringify(def.nValue) : 'not specified';
-      sIn.value = def.sValue && Object.keys(def.sValue).length
-        ? JSON.stringify(def.sValue) : 'not specified';
-      dtp.value =  parts[0];
-      stp.value =  parts[1];
-        
-    }
 
     // Add entry knop gebruik je nu alleen voor handmatig toevoegen
     addBtn.addEventListener('click', () => createEntry());
 
     // Genereer de eind-JSON
     genBtn.addEventListener('click', () => {
-      const [server, port] = document.getElementById('brokerInfo')
-                               .textContent.split(':');
       const mappings = [];
       document.querySelectorAll('.entry').forEach(entry => {
         const topicVal = entry.querySelector('select[name="topic"]').value;
