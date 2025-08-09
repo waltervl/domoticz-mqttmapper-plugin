@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <title>Domoticz-MQTT Mapper Generator</title>
+  <style>
+    body { 
+		font-family: sans-serif; 
+		margin: 2rem; 
+		line-height: 1.5; }
+		background: #FFFFFF; 
+		form > div, fieldset { margin-bottom: 1.5rem; } 
+		label { display: block; margin-bottom: 0.5rem; } 
+		input, select, button { font-size: 1rem; padding: 0.4rem; margin-top: 0.2rem; } 
+		select, input[type="text"] { width: 100%; max-width: 400px; } 
+		fieldset { border: 1px solid #ccc; padding: 1rem; } 
+		legend { font-weight: bold; } 
+		.entry { border: 1px dashed #aaa; padding: 1rem; margin-bottom: 1rem; position: relative; } 
+		.removeEntryBtn { position: absolute; top: 1rem; right: 1rem; background: #e74c3c; color: white; border: none; cursor: pointer; padding: 0.2rem 0.5rem; } 
+		#messages, #output { background: #f7f7f7; padding: 1rem; border: 1px solid #ddd; white-space: pre-wrap; word-wrap: break-word; } 
+		#messages { max-height: 150px; overflow-y: auto; } 
+		/* Sjabloon verborgen */ 
+		#templateContainer { display: none; }
+    /* Debug-logpaneel */
+    #debugLog {
+      display: none;
+      background: #eef;
+      border: 1px solid #99f;
+      padding: 0.5rem;
+      margin-bottom: 1rem;
+      max-height: 120px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 0.9rem;
+    }
+    /* Alle readonly inputs lichtgrijs maken */
+    input[readonly] {
+         background-color: #eee;
+         }
+
+  </style>
+</head>
+<body>
+  <h1>Domoticz-MQTT Mapper Generator</h1>
+  
+	<!-- Debug toggle and panel -->
+  <div style="margin-bottom:1rem;">
+    <label><input type="checkbox" id="debugToggle"> Debug</label>
+  </div>
+  <div id="debugLog"></div>
+
+  <form id="configForm">
+    <div>
+      <strong>Broker:</strong>
+      <span id="brokerInfo">{{ broker_host }}:{{ broker_port }}</span>
+    </div>
+
+    <div id="templateContainer">
+      <label for="topicSelect">Alle topics
+        <select id="topicSelect" disabled>
+          <option>— wacht op berichten —</option>
+        </select>
+      </label>
+    </div>
+
+    <fieldset id="mappingSection">
+      <legend>Mappings</legend>
+      <button type="button" id="addEntryBtn" disabled>Add entry</button>
+    </fieldset>
+
+    <button type="button" id="generateBtn" disabled>Generate JSON</button>
+  </form>
+
+  <h2>Received MQTT-messages</h2>
+  <ul id="messages"></ul>
+
+  <h2>Result JSON</h2>
+  <pre id="output">{ }</pre>
+
+  <script>
+	// Debug‐helpers
+    const debugToggle = document.getElementById('debugToggle');
+    const debugLogEl  = document.getElementById('debugLog');
+    // remember debug status in localStorage
+    const DEBUG = localStorage.getItem('debug') === 'true';
+    debugToggle.checked = DEBUG;
+    if (DEBUG) debugLogEl.style.display = 'block';
+
+    debugToggle.addEventListener('change', e => {
+      const on = e.target.checked;
+      localStorage.setItem('debug', on);
+      debugLogEl.style.display = on ? 'block' : 'none';
+      logDebug(`Debug mode ${on ? 'aan' : 'uit'}`);
+    });
+
+    function logDebug(msg) {
+      if (!debugToggle.checked) return;
+      console.debug('[DEBUG]', msg);
+      const time = new Date().toISOString().substr(11, 8);
+      const line = document.createElement('div');
+      line.textContent = `[${time}] ${msg}`;
+      debugLogEl.appendChild(line);
+      debugLogEl.scrollTop = debugLogEl.scrollHeight;
+    }
+    // Globale state
+    let domoticzDTypes = {};
+    let typeOptionsHtml = '';
+    let entryCount = 0;
+    const topicsSet = new Set();
+
+    const msgList   = document.getElementById('messages');
+    const topicSel  = document.getElementById('topicSelect');
+    const addBtn    = document.getElementById('addEntryBtn');
+    const genBtn    = document.getElementById('generateBtn');
+    const mappingSec = document.getElementById('mappingSection');
+
+    // SSE: update received messages, topics- & entries
+    const evtSource = new EventSource('/events');
+    evtSource.onmessage = e => {
+      const { topic, payload } = JSON.parse(e.data);
+      if (!topicsSet.has(topic)) {
+        addTopicOption(topic);
+        enableButtons();
+      }
+      updateEntries(topic, payload);
+      logMessage(topic, payload);
+    };
+    evtSource.onerror = () => { console.error('SSE broken'); evtSource.close(); };
+
+    // Helper: topic-option
+    function addTopicOption(topic) {
+      topicsSet.add(topic);
+      const opt = document.createElement('option');
+      opt.value = topic;
+      opt.text  = topic;
+      topicSel.appendChild(opt);
+      document.querySelectorAll('select[name="topic"]')
+              .forEach(sel => sel.appendChild(opt.cloneNode(true)));
+    }
+
+    function enableButtons() {
+      if (topicsSet.size > 0) {
+        addBtn.disabled = false;
+        genBtn.disabled = false;
+      }
+    }
+
+    // Helper: update "latestPayload" in existing entries
+    function updateEntries(topic, payload) {
+      document.querySelectorAll('.entry').forEach(entry => {
+        if (entry.querySelector('select[name="topic"]').value === topic) {
+          entry.querySelector('input[name="latestPayload"]').value = payload;
+        }
+      });
+    }
+
+    function logMessage(topic, payload) {
+      const li = document.createElement('li');
+      li.textContent = `${topic}: ${payload}`;
+      msgList.appendChild(li);
+      msgList.scrollTop = msgList.scrollHeight;
+    }
+
+    fetch('{{ url_for("project_assets", filename="DomoticzTypes.json") }}') 
+      .then(r => r.json()) 
+      .then(json => { domoticzDTypes = json.definitions; buildTypeOptions(); }) 
+      .catch(err => console.error('Fout bij laden types:', err));
+
+     let exampleJson = null;
+    fetch('{{ url_for("project_assets", filename="example.json") }}')
+     .then(r => {
+      if (!r.ok) {
+        // bestand bestaat niet of 404
+        logDebug(`Geen example.json gevonden (status ${r.status})`);
+        return null;
+       }
+      return r.json();
+     })
+    .then(json => {
+      exampleJson = json;
+      logDebug(`exampleJson met data=${JSON.stringify(exampleJson)}`);
+      if (exampleJson) {
+        buildFromExample(exampleJson);
+      }
+    })
+    .catch(err => {
+      logDebug(`Fout bij laden example.json: ${err}`);
+    });
+
+
+    // build the <option> list for Domoticz‐types
+    function buildTypeOptions() {
+      typeOptionsHtml = '<option value="">Select device type…</option>';
+      logDebug(`buildTypeOptions() aangeroepen with data=${JSON.stringify(domoticzDTypes)}`);
+      Object.entries(domoticzDTypes).forEach(([id, def]) => {
+        typeOptionsHtml +=
+          `<option value="${id}">${def.typeName}/${def.subTypeName} (${id})</option>`;
+      });
+    }
+    // Build entries from example.json
+    function buildFromExample(exampleJson) {
+      Object.entries(exampleJson).forEach(([name, def]) => {
+        // 1) automatisch het topic toevoegen
+        if (!topicsSet.has(def.topic)) {
+          addTopicOption(def.topic);
+        }
+        // 2) maak de entry met vooringevulde waarden
+        // logDebug(`createEntry() aangeroepen with def-data=${JSON.stringify(def)}`);
+        const defoptions = (JSON.stringify(def.options) || '')
+          .replace(/"/g, '&quot;');
+        const defset = (JSON.stringify(def.set) || '')
+          .replace(/"/g, '&quot;');
+        createEntry({
+          topic:   def.topic,
+          name:    name,
+          dtype:    def.type,
+          subtype: def.subtype,
+          switchtype: def.switchtype,
+          options: defoptions,
+          set: defset,
+          mapping: (() => {
+            // schrijf mapping-object back to string
+            return JSON.stringify(def.mapping).replace(/"/g, '&quot;');
+          })()
+        });
+      });
+      enableButtons();
+    }
+
+    // Maak en voeg een nieuwe mapping-entry toe; optioneel initial data
+    function createEntry(data = {}) {
+      //logDebug(`createEntry() aangeroepen with data=${JSON.stringify(data)}`);
+      entryCount++;
+      const div = document.createElement('div');
+      div.className = 'entry';
+
+      // Kopieer topic-options
+      const topicOptionsHtml = topicSel.innerHTML;
+
+      div.innerHTML = `
+        <h3>Entry ${entryCount}</h3>
+        <button class="removeEntryBtn" type="button">&#10005;</button>
+
+        <label>Topic
+          <select name="topic" required>${topicOptionsHtml}</select>
+        </label>
+
+        <label>Last Payload
+          <input type="text" name="latestPayload" readonly placeholder="wait for new message">
+        </label>
+
+        <label>Naam
+          <input type="text" name="name" required value="${data.name||''}">
+        </label>
+
+        <label>Type
+          <select name="type" required>${typeOptionsHtml}</select>
+        </label>
+        <div >
+        <label style="display: inline-block">dtype
+          <input type="text" name="dtype" readonly value="${data.dtype||''}" style="width:40px">
+        </label>
+        </label>
+        <label style="display: inline-block">subtype
+          <input type="text" name="subtype" readonly value="${data.subtype||''}" style="width:40px">
+        </label>
+        </label>
+        <label style="display: inline-block">switchtype
+          <input type="text" name="switchtype" value="${data.switchtype||''}" style="width:40px">
+        </label>
+        </div>
+        <label>options (json)
+          <input type="text" name="options" value="${data.options||''}">
+        </label>        
+        <label>set (json)
+          <input type="text" name="options" value="${data.set||''}">
+        </label>   
+        <label>nValue (numeric)
+          <input type="text" name="nValue" readonly>
+        </label>
+        <label>sValue (string)
+          <input type="text" name="sValue" readonly>
+        </label>
+
+        <label>Mapping (payload-pad)
+          <input type="text" name="mapping" placeholder='example: {"item":"value"}' required
+                 value="${data.mapping||''}">
+        </label>
+      `;
+      // Verwijder-knop
+      div.querySelector('.removeEntryBtn')
+         .addEventListener('click', () => div.remove());
+
+      // Set topic als er een default is
+      if (data.topic) {
+        div.querySelector('select[name="topic"]').value = data.topic;
+      }
+      // Bij type-keuze: toon nValue & sValue
+      div.querySelector('select[name="type"]')
+         .addEventListener('change', e => fillTypeFields(div, e.target.value));
+
+      // Als er al een type in data zat, trigger fill
+      if (data.type) {
+        const sel = div.querySelector('select[name="type"]');
+        sel.value = data.type;
+        fillTypeFields(div, data.type);
+      }
+      if (data.dtype) {
+        const sel2 = div.querySelector('select[name="type"]');
+        sel2.value = data.dtype+'/'+data.subtype;
+      }
+      // get type from dtype and subtype, trigger fill
+      if (data.dtype) {
+        //const sel = div.querySelector('select[name="type"]');
+        //sel.value = data.type;
+        stypeid = data.dtype+'/'+data.subtype
+        fillTypeFields(div, stypeid);
+      }
+
+      // Voeg vóór de "Add entry"-knop in
+      mappingSec.insertBefore(div, addBtn);
+      return div;
+    }
+
+    // Helper: vul nValue & sValue op basis van gekozen type ID
+    function fillTypeFields(container, typeId) {
+	  logDebug(`fillTypeFields() aangeroepen with typeId=${typeId}`);
+      const def = domoticzDTypes[typeId] || {};
+      const dtp = container.querySelector('input[name="dtype"]');
+      const stp = container.querySelector('input[name="subtype"]');
+      const nIn = container.querySelector('input[name="nValue"]');
+      const sIn = container.querySelector('input[name="sValue"]');
+      parts  = typeId.split('/');
+      
+      nIn.value = def.nValue && Object.keys(def.nValue).length
+        ? JSON.stringify(def.nValue) : 'not specified';
+      sIn.value = def.sValue && Object.keys(def.sValue).length
+        ? JSON.stringify(def.sValue) : 'not specified';
+      dtp.value =  parts[0];
+      stp.value =  parts[1];
+        
+    }
+
+    // Add entry knop gebruik je nu alleen voor handmatig toevoegen
+    addBtn.addEventListener('click', () => createEntry());
+
+    // Genereer de eind-JSON
+    genBtn.addEventListener('click', () => {
+      const [server, port] = document.getElementById('brokerInfo')
+                               .textContent.split(':');
+      const mappings = [];
+      document.querySelectorAll('.entry').forEach(entry => {
+        const topicVal = entry.querySelector('select[name="topic"]').value;
+        const name     = entry.querySelector('input[name="name"]').value.trim();
+        const typeId   = parseInt(entry.querySelector('select[name="type"]').value, 10);
+        const mapStr   = entry.querySelector('input[name="mapping"]').value.trim();
+        if (topicVal && name && typeId && mapStr) {
+          mappings.push({
+            Topic:   topicVal,
+            Name:    name,
+            Type:    typeId,
+            Mapping: JSON.parse(mapStr)
+          });
+        }
+      });
+      document.getElementById('output').textContent =
+        JSON.stringify({ mappings }, null, 2);
+    });
+
+  </script>
+</body>
+</html>
