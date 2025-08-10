@@ -61,7 +61,7 @@
 
 	/* Optional: turn the icon at collapsed */
 	.entry.collapsed .toggleEntryBtn {
-		transform: rotate(90deg);
+		transform: rotate(-90deg);
 	}
 
   </style>
@@ -190,7 +190,7 @@
     // Helper: show nValue, sValue, dtype, subtype hints based on chosen Device
     // Needs to be improved for multiple sValue devices.
     function fillTypeFields(container, typeId) {
-	  logDebug(`fillTypeFields() aangeroepen with typeId=${typeId}`);
+	  logDebug(`fillTypeFields() called with typeId=${typeId}`);
       const def = domoticzDTypes[typeId] || {};
       const dtp = container.querySelector('input[name="dtype"]');
       const stp = container.querySelector('input[name="subtype"]');
@@ -209,7 +209,7 @@
 	function collapseEntry(div) {
 	  div.classList.add('collapsed');
 	  const btn = div.querySelector('.toggleEntryBtn');
-	  if (btn) btn.textContent = '▶';
+	  if (btn) btn.textContent = '▼';
 	}
 
     // Start with loading device types 
@@ -242,7 +242,7 @@
 	function buildTypeOptions() {
       typeOptionsHtml = '<option value="">Select device type…</option>';
       //logDebug(`buildTypeOptions() called with data=${JSON.stringify(domoticzDTypes)}`);
-      logDebug(`buildTypeOptions() aangeroepen`);
+      logDebug(`buildTypeOptions() called`);
       Object.entries(domoticzDTypes).forEach(([id, def]) => {
         typeOptionsHtml +=
           `<option value="${id}">${def.typeName}/${def.subTypeName} (${id})</option>`;
@@ -282,7 +282,7 @@
 	  // Template met header + body wrapper
 	  div.innerHTML = `
 		<div class="entry-header">
-		  <span class="toggleEntryBtn">▶</span>
+		  <span class="toggleEntryBtn">▼</span> 
 		  <h3>Mapping ${entryCount}</h3>
 		  <!-- Name always stays visible -->
 		  <label style="margin-left:auto;">
@@ -352,7 +352,7 @@
 	  header.addEventListener('click', () => {
 		div.classList.toggle('collapsed');
 		// Rotate arrow
-		toggleBtn.textContent = div.classList.contains('collapsed') ? '▶' : '▶';
+		// toggleBtn.textContent = div.classList.contains('collapsed') ? '▶' : '▶';
 	  });
 
 	  // DeviceType-choice event en prefill
