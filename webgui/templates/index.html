@@ -7,21 +7,23 @@
     body { 
 		font-family: sans-serif; 
 		margin: 2rem; 
-		line-height: 1.5; }
-		background: #FFFFFF; 
-		form > div, fieldset { margin-bottom: 1.5rem; } 
-		label { display: block; margin-bottom: 0.5rem; } 
-		input, select, button { font-size: 1rem; padding: 0.4rem; margin-top: 0.2rem; } 
-		select, input[type="text"] { width: 100%; max-width: 400px; } 
-		fieldset { border: 1px solid #ccc; padding: 1rem; } 
-		legend { font-weight: bold; } 
-		.entry { border: 1px dashed #aaa; padding: 1rem; margin-bottom: 1rem; position: relative; } 
-		.removeEntryBtn { position: absolute; top: 1rem; right: 1rem; background: #e74c3c; color: white; border: none; cursor: pointer; padding: 0.2rem 0.5rem; } 
-		#messages, #output { background: #f7f7f7; padding: 1rem; border: 1px solid #ddd; white-space: pre-wrap; word-wrap: break-word; } 
-		#messages { max-height: 150px; overflow-y: auto; } 
-		/* Sjabloon verborgen */ 
-		#templateContainer { display: none; }
-    /* Debug-logpaneel */
+		background: #FFFFFF;
+		line-height: 1 }
+ 
+	form > div, fieldset { margin-bottom: 0.5rem; } 
+	label { display: block; margin-bottom: 0.5rem; } 
+	input, select, button { font-size: 1rem; padding: 0.4rem; margin-top: 0.2rem; } 
+	select, input[type="text"] { width: 100%; max-width: 400px; } 
+	fieldset { border: 1px solid #ccc; padding: 1rem; } 
+	legend { font-weight: bold; } 
+	.entry { border: 1px dashed #aaa; padding: 1rem; margin-bottom: 1rem; position: relative; } 
+	.removeEntryBtn { position: absolute; top: 1rem; right: 1rem; background: #e74c3c; color: white; border: none; cursor: pointer; padding: 0.2rem 0.5rem; } 
+	#messages, #output { background: #f7f7f7; padding: 1rem; border: 1px solid #ddd; white-space: pre-wrap; word-wrap: break-word; } 
+	#messages { max-height: 150px; overflow-y: auto; } 
+	/* template hidden */ 
+	#templateContainer { display: none; }
+
+    /* Debug-logpanel */
     #debugLog {
       display: none;
       background: #eef;
@@ -33,33 +35,33 @@
       font-family: monospace;
       font-size: 0.9rem;
     }
-    /* Alle  readonly inputs lichtgrijs maken */
+    /* All  readonly inputs lightgray */
     input[readonly] {
          background-color: #eee;
          }
-    /* Header en toggle-knop */
+    /* Header and toggle-button */
 	.entry-header {
-	display: flex;
-	align-items: center;
-	background: #f9f9f9;
-	padding: 0.5rem;
-	border-bottom: 1px solid #ddd;
-	cursor: pointer;
+		display: flex;
+		align-items: center;
+		background: #f9f9f9;
+		padding: 0.5rem;
+		border-bottom: 1px solid #ddd;
+		cursor: pointer;
 	}
 
 	.toggleEntryBtn {
-	font-size: 1.2rem;
-	margin-right: 0.5rem;
+		font-size: 1.2rem;
+		margin-right: 0.5rem;
 	}
 
-	/* Bij collapsed: verberg alle velden behalve de Naam */
+	/* At collapsed: Hide all fields except Name */
 	.entry.collapsed .entry-body {
-	display: none;
+		display: none;
 	}
 
-	/* Optioneel: draai het icoon bij collapsed */
+	/* Optional: turn the icon at collapsed */
 	.entry.collapsed .toggleEntryBtn {
-	transform: rotate(-90deg);
+		transform: rotate(90deg);
 	}
 
   </style>
@@ -185,7 +187,8 @@
       msgList.appendChild(li);
       msgList.scrollTop = msgList.scrollHeight;
     }
-    // Helper: vul nValue & sValue op basis van gekozen type ID
+    // Helper: show nValue, sValue, dtype, subtype hints based on chosen Device
+    // Needs to be improved for multiple sValue devices.
     function fillTypeFields(container, typeId) {
 	  logDebug(`fillTypeFields() aangeroepen with typeId=${typeId}`);
       const def = domoticzDTypes[typeId] || {};
@@ -203,19 +206,25 @@
       stp.value =  parts[1];
         
     }
-        
+	function collapseEntry(div) {
+	  div.classList.add('collapsed');
+	  const btn = div.querySelector('.toggleEntryBtn');
+	  if (btn) btn.textContent = '▶';
+	}
+
+    // Start with loading device types 
 	fetch('{{ url_for("project_assets", filename="DomoticzTypes.json") }}')
 	  .then(r => r.json())
 	  .then(json => {
 		domoticzDTypes   = json.definitions;
-		buildTypeOptions();
-		// pas na buildTypeOptions example.json ophalen
+		buildTypeOptions(); // build List of values for UI
+		// only after buildTypeOptions load mapping json
 		return fetch('{{ url_for("project_assets", filename="example.json") }}');
 	  })
 	  .then(r => {
-		if (!r) return null;         // in geval van mislukte types-fetch
+		if (!r) return null;         // in case of failed types-fetch
 		if (!r.ok) {
-		  logDebug(`Geen example.json gevonden (status ${r.status})`);
+		  logDebug(`No mapping json found (status ${r.status})`);
 		  return null;
 		}
 		return r.json();
@@ -227,12 +236,12 @@
 		}
 	  })
 	  .catch(err => {
-		console.error('Fout bij laden data:', err);
+		console.error('Error at loading data:', err);
 	  });
 		
 	function buildTypeOptions() {
       typeOptionsHtml = '<option value="">Select device type…</option>';
-      //logDebug(`buildTypeOptions() aangeroepen with data=${JSON.stringify(domoticzDTypes)}`);
+      //logDebug(`buildTypeOptions() called with data=${JSON.stringify(domoticzDTypes)}`);
       logDebug(`buildTypeOptions() aangeroepen`);
       Object.entries(domoticzDTypes).forEach(([id, def]) => {
         typeOptionsHtml +=
@@ -240,33 +249,27 @@
       });
     }
 
-    // Build entries from example.json
+    // Build entries from loaded mapping json
     function buildFromMapping() {
-	  logDebug(`buildFromMapping() aangeroepen`);
+	  logDebug(`buildFromMapping() called`);
       Object.entries(mappingJson).forEach(([name, def]) => {
-        // 1) automatisch het topic toevoegen
+        // add topic automatically
         if (!topicsSet.has(def.topic)) {
           addTopicOption(def.topic);
         }
-        // 2) maak de entry met vooringevulde waarden
-        // logDebug(`createEntry() aangeroepen with def-data=${JSON.stringify(def)}`);
-        const defoptions = (JSON.stringify(def.options) || '')
-          .replace(/"/g, '&quot;');
-        const defset = (JSON.stringify(def.set) || '')
-          .replace(/"/g, '&quot;');
-        createEntry({
-          topic:   def.topic,
-          name:    name,
-          dtype:    def.type,
-          subtype: def.subtype,
+        // create the entry with values
+        const newentry = createEntry({
+          topic:      def.topic,
+          name:       name,
+          dtype:      def.type,
+          subtype:    def.subtype,
           switchtype: def.switchtype,
-          options: defoptions,
-          set: defset,
-          mapping: (() => {
-            // schrijf mapping-object back to string
-            return JSON.stringify(def.mapping).replace(/"/g, '&quot;');
-          })()
+          options:    JSON.stringify((def.options) || '').replace(/"/g, '&quot;'),
+          set:        JSON.stringify((def.set) || '').replace(/"/g, '&quot;'),
+          mapping:    JSON.stringify(def.mapping).replace(/"/g, '&quot;')
         });
+        collapseEntry(newentry); 
+        //collapse by default.
       });
       enableButtons();
     }
@@ -279,9 +282,9 @@
 	  // Template met header + body wrapper
 	  div.innerHTML = `
 		<div class="entry-header">
-		  <span class="toggleEntryBtn">⯆</span>
-		  <h3>Entry ${entryCount}</h3>
-		  <!-- Naam blijft altijd zichtbaar -->
+		  <span class="toggleEntryBtn">▶</span>
+		  <h3>Mapping ${entryCount}</h3>
+		  <!-- Name always stays visible -->
 		  <label style="margin-left:auto;">
 			Naam
 			<input type="text" name="name" required value="${data.name||''}">
@@ -335,10 +338,10 @@
 		</div>
 	  `;
 
-	  // Event listener voor verwijderknop
+	  // Event listener for remove button
 	  div.querySelector('.removeEntryBtn').addEventListener('click', () => div.remove());
 
-	  // Zet default topic als meegegeven
+	  // Set default topic as given
 	  if (data.topic) {
 		div.querySelector('select[name="topic"]').value = data.topic;
 	  }
@@ -348,11 +351,11 @@
 	  const toggleBtn = header.querySelector('.toggleEntryBtn');
 	  header.addEventListener('click', () => {
 		div.classList.toggle('collapsed');
-		// Pijltje omdraaien
-		toggleBtn.textContent = div.classList.contains('collapsed') ? '-' : '+';
+		// Rotate arrow
+		toggleBtn.textContent = div.classList.contains('collapsed') ? '▶' : '▶';
 	  });
 
-	  // Type-keuze event en voorvullen
+	  // DeviceType-choice event en prefill
 	  const typeSel = div.querySelector('select[name="type"]');
 	  typeSel.addEventListener('change', e => fillTypeFields(div, e.target.value));
 	  if (data.type) {
@@ -367,37 +370,68 @@
 		fillTypeFields(div, syntheticType);
 	  }
 
-	  // Plaats voor de Add entry-knop
+	  // Reserved for Add entry-button
 	  mappingSec.insertBefore(div, addBtn);
 	  return div;
 	}
 
-
-
-
-    // Add entry knop gebruik je nu alleen voor handmatig toevoegen
+    // Add entry button
     addBtn.addEventListener('click', () => createEntry());
 
-    // Genereer de eind-JSON
-    genBtn.addEventListener('click', () => {
-      const mappings = [];
-      document.querySelectorAll('.entry').forEach(entry => {
-        const topicVal = entry.querySelector('select[name="topic"]').value;
-        const name     = entry.querySelector('input[name="name"]').value.trim();
-        const typeId   = parseInt(entry.querySelector('select[name="type"]').value, 10);
-        const mapStr   = entry.querySelector('input[name="mapping"]').value.trim();
-        if (topicVal && name && typeId && mapStr) {
-          mappings.push({
-            Topic:   topicVal,
-            Name:    name,
-            Type:    typeId,
-            Mapping: JSON.parse(mapStr)
-          });
-        }
-      });
-      document.getElementById('output').textContent =
-        JSON.stringify({ mappings }, null, 2);
-    });
+    // Generate new mapping-JSON
+    //Todo: save the file.
+	genBtn.addEventListener('click', () => {
+	  logDebug('generate json called');
+	  const mappings = [];
+
+	  document.querySelectorAll('.entry').forEach(entry => {
+		const topicVal = entry.querySelector('select[name="topic"]').value;
+		const name     = entry.querySelector('input[name="name"]').value.trim();
+		const typeId   = parseInt(entry.querySelector('select[name="type"]').value, 10);
+
+		const optInput = entry.querySelector('input[name="options"]');
+		const setInput = entry.querySelector('input[name="set"]');
+		const mapInput = entry.querySelector('input[name="mapping"]');
+
+		const optStr = optInput ? optInput.value.trim() : '';
+		const setStr = setInput ? setInput.value.trim() : '';
+		const mapStr = mapInput ? mapInput.value.trim() : '';
+
+		if (!topicVal || !name || !typeId || !mapStr) {
+			logDebug(`No action! Topic, name, Type or mapping is empty..`);
+			return;
+		}
+
+		const mapping = {
+		  Topic:   topicVal,
+		  Name:    name,
+		  Type:    typeId
+		};
+
+		if (optStr) {
+		  try {
+			mapping.Options = JSON.parse(optStr);
+		  } catch (e) {
+			logDebug('Invalid options JSON, skipping:', optStr, e);
+		  }
+		}
+
+		if (setStr) {
+		  try {
+			mapping.Set = JSON.parse(setStr);
+		  } catch (e) {
+			logDebug('Invalid set JSON, skipping:', setStr, e);
+		  }
+		}
+
+		mapping.Mapping = JSON.parse(mapStr);
+		mappings.push(mapping);
+	  });
+
+	  //logDebug(`new mappings=${JSON.stringify(mappings)}`);
+	  document.getElementById('output').textContent =
+		JSON.stringify({ mappings }, null, 2);
+	});
 
   </script>
 </body>
