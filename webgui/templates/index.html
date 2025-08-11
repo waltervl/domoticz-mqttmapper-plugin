@@ -5,19 +5,30 @@
   <title>Domoticz-MQTT Mapper Generator</title>
   <style>
     body { 
-		font-family: sans-serif; 
+		font-family: sans-serif;
+		font-size: 14px; 
 		margin: 2rem; 
 		background: #FFFFFF;
 		line-height: 1 }
  
-	form > div, fieldset { margin-bottom: 0.5rem; } 
-	label { display: block; margin-bottom: 0.5rem; } 
-	input, select, button { font-size: 1rem; padding: 0.4rem; margin-top: 0.2rem; } 
+	form > div, fieldset { margin-bottom: 0.2rem; } 
+	label { display: block; margin-bottom: 0.2rem; } 
+	input, select, button { font-size: 14px; padding: 0.2rem; margin-top: 0.2rem; } 
 	select, input[type="text"] { width: 100%; max-width: 400px; } 
 	fieldset { border: 1px solid #ccc; padding: 1rem; } 
 	legend { font-weight: bold; } 
-	.entry { border: 1px dashed #aaa; padding: 1rem; margin-bottom: 1rem; position: relative; } 
-	.removeEntryBtn { position: absolute; top: 1rem; right: 1rem; background: #e74c3c; color: white; border: none; cursor: pointer; padding: 0.2rem 0.5rem; } 
+	.entry { border: 1px dashed #aaa; 
+		padding: 1rem; 
+		margin-bottom: 1rem; 
+		position: relative; } 
+	.removeEntryBtn { position: absolute; 
+		top: 1rem; 
+		right: 1rem; 
+		background: #e74c3c; 
+		color: white; 
+		border: none; 
+		cursor: pointer; 
+		padding: 0.2rem 0.5rem; } 
 	#messages, #output { background: #f7f7f7; padding: 1rem; border: 1px solid #ddd; white-space: pre-wrap; word-wrap: break-word; } 
 	#messages { max-height: 150px; overflow-y: auto; } 
 	/* template hidden */ 
@@ -285,8 +296,9 @@
 		  <span class="toggleEntryBtn">▼</span> 
 		  <h3>Mapping ${entryCount}</h3>
 		  <!-- Name always stays visible -->
-		  <label style="margin-left:auto;">
-			Naam
+		  <!-- <label style="margin-left:auto;"> -->
+	      <label style="margin-left:1rem;">
+			Device Name
 			<input type="text" name="name" required value="${data.name||''}">
 		  </label>
 		  <button class="removeEntryBtn" type="button">&times;</button>
@@ -397,10 +409,10 @@
 		const setStr = setInput ? setInput.value.trim() : '';
 		const mapStr = mapInput ? mapInput.value.trim() : '';
 
-		if (!topicVal || !name || !typeId || !mapStr) {
-			logDebug(`No action! Topic, name, Type or mapping is empty..`);
-			return;
-		}
+		//if (!topicVal || !name || !typeId || !mapStr) {
+		//	logDebug(`No action! Topic, name, Type or mapping is empty..`);
+		//	return;
+		//}
 
 		const mapping = {
 		  Topic:   topicVal,
