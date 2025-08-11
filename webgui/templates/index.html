@@ -1,3 +1,5 @@
+2025-08-11  bolt  <bolt@bolt-C40>
+
 <!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -85,21 +87,21 @@
     <label><input type="checkbox" id="debugToggle"> Debug</label>
   </div>
   <div id="debugLog"></div>
-
-  <form id="configForm">
-    <div>
+  <div>
       <strong>Broker:</strong>
       <span id="brokerInfo">{{ broker_host }}:{{ broker_port }}</span>
-    </div>
+      <h2>Received MQTT-messages</h2>
+      <ul id="messages"></ul>
+  </div>
 
+  <form id="configForm">
     <div id="templateContainer">
       <label for="topicSelect">Alle topics
         <select id="topicSelect" disabled>
-          <option>— wacht op berichten —</option>
+          <option>— Select an MQTT topic —</option>
         </select>
       </label>
     </div>
-
     <fieldset id="mappingSection">
       <legend>Mappings</legend>
       <button type="button" id="addEntryBtn" disabled>Add entry</button>
@@ -107,9 +109,6 @@
 
     <button type="button" id="generateBtn" disabled>Generate JSON</button>
   </form>
-
-  <h2>Received MQTT-messages</h2>
-  <ul id="messages"></ul>
 
   <h2>Result JSON</h2>
   <pre id="output">{ }</pre>
@@ -228,7 +227,9 @@
 	  .then(r => r.json())
 	  .then(json => {
 		domoticzDTypes   = json.definitions;
+		domoticzSwTypes  = json.switchTypes;
 		buildTypeOptions(); // build List of values for UI
+		buildSwTypeOptions(); // build List of values for UI
 		// only after buildTypeOptions load mapping json
 		return fetch('{{ url_for("project_assets", filename="example.json") }}');
 	  })
@@ -259,7 +260,15 @@
           `<option value="${id}">${def.typeName}/${def.subTypeName} (${id})</option>`;
       });
     }
-
+	function buildSwTypeOptions() {
+      SwtypeOptionsHtml = '<option value="">Select switchtype…</option>';
+      //logDebug(`buildTypeOptions() called with data=${JSON.stringify(domoticzSwTypes)}`);
+      logDebug(`buildSWTypeOptions() called`);
+      Object.entries(domoticzSwTypes).forEach(([id, def]) => {
+        SwtypeOptionsHtml +=
+          `<option value="${id}">${id}</option>`;
+      });
+    }
     // Build entries from loaded mapping json
     function buildFromMapping() {
 	  logDebug(`buildFromMapping() called`);
@@ -306,7 +315,10 @@
 		<div class="entry-body">
 		  <label>
 			Topic
-			<select name="topic" required>${topicSel.innerHTML}</select>
+			<select name="topic" 
+				title="Please select the topic from the list. It can take some time to read the MQTT server"
+				required>${topicSel.innerHTML}</select>
+			
 		  </label>
 		  <label>
 			Last Payload
@@ -314,7 +326,9 @@
 		  </label>
 		  <label>
 			Type
-			<select name="type" required>${typeOptionsHtml}</select>
+			<select name="type" 
+			title="Please select the device type from the list."
+			required>${typeOptionsHtml}</select>
 		  </label>
 		  <div>
 			<label style="display:inline-block">
@@ -324,7 +338,12 @@
 			  subtype <input type="text" name="subtype" readonly style="width:40px" value="${data.subtype||''}">
 			</label>
 			<label style="display:inline-block">
-			  switchtype <input type="text" name="switchtype" style="width:40px" value="${data.switchtype||''}">
+			  <!-- switchtype <input type="text" name="switchtype" style="width:40px" value="${data.switchtype||'0'}"> -->
+			  <!-- Only for dtype 243/33 this list should be shown, else switchtype = 0 -->
+			 SwitchType
+			 <select name="switchtype" 
+			title="Please select the switchtype from the list."
+			required>${SwtypeOptionsHtml}</select>
 			</label>
 		  </div>
 		  <label>
@@ -400,6 +419,7 @@
 		const topicVal = entry.querySelector('select[name="topic"]').value;
 		const name     = entry.querySelector('input[name="name"]').value.trim();
 		const typeId   = parseInt(entry.querySelector('select[name="type"]').value, 10);
+		// Todo: add switchtipe value from switchtype json domoticzSwTypes
 
 		const optInput = entry.querySelector('input[name="options"]');
 		const setInput = entry.querySelector('input[name="set"]');
