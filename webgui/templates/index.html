@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-<html lang="nl">
 <head>
   <meta charset="UTF-8">
   <title>Domoticz-MQTT Mapper Generator</title>
@@ -29,7 +28,11 @@
 		border: none; 
 		cursor: pointer; 
 		padding: 0.2rem 0.5rem; } 
-	#messages, #output { background: #f7f7f7; padding: 1rem; border: 1px solid #ddd; white-space: pre-wrap; word-wrap: break-word; } 
+	#messages, #output { background: #f7f7f7; 
+		padding: 1rem; 
+		border: 1px solid #ddd; 
+		white-space: pre-wrap; 
+		word-wrap: break-word; } 
 	#messages { max-height: 150px; overflow-y: auto; } 
 	/* template hidden */ 
 	#templateContainer { display: none; }
@@ -105,7 +108,7 @@
       <button type="button" id="addEntryBtn" disabled>Add entry</button>
     </fieldset>
 
-    <button type="button" id="generateBtn" disabled>Generate JSON</button>
+    <button type="button" id="generateBtn" disabled>Validate and Generate JSON</button>
   </form>
 
   <h2>Result JSON</h2>
@@ -172,7 +175,17 @@
       document.querySelectorAll('select[name="topic"]')
               .forEach(sel => sel.appendChild(opt.cloneNode(true)));
     }
-
+	function hasJsonStructure(str) {
+		if (typeof str !== 'string') return false;
+		try {
+			const result = JSON.parse(str);
+			const type = Object.prototype.toString.call(result);
+			return type === '[object Object]' 
+				|| type === '[object Array]';
+		} catch (err) {
+			return false;
+		}
+	}
     function enableButtons() {
       if (topicsSet.size > 0) {
         addBtn.disabled = false;
@@ -378,11 +391,17 @@
 	  // Toggle collapse/expand
 	  const header = div.querySelector('.entry-header');
 	  const toggleBtn = header.querySelector('.toggleEntryBtn');
-	  header.addEventListener('click', () => {
-		div.classList.toggle('collapsed');
-		// Rotate arrow
-		// toggleBtn.textContent = div.classList.contains('collapsed') ? '▶' : '▶';
+	  const title = header.querySelector('h3');
+
+	  // Make both toggleable
+	  [toggleBtn, title].forEach(el => {
+	    el.style.cursor = 'pointer';
+	    el.addEventListener('click', e => {
+		  e.stopPropagation(); // prevent bubbling to parent
+		  div.classList.toggle('collapsed');
+	    });
 	  });
+
 
 	  // DeviceType-choice event en prefill
 	  const typeSel = div.querySelector('select[name="type"]');
@@ -407,16 +426,19 @@
     // Add entry button
     addBtn.addEventListener('click', () => createEntry());
 
-    // Generate new mapping-JSON
+    // Generate new mapping-JSON and validate
     //Todo: save the file.
 	genBtn.addEventListener('click', () => {
 	  logDebug('generate json called');
 	  const mappings = [];
 
 	  document.querySelectorAll('.entry').forEach(entry => {
-		const topicVal = entry.querySelector('select[name="topic"]').value;
+		let topicVal = entry.querySelector('select[name="topic"]').value;
+		if (topicVal === '— Select an MQTT topic —') { topicVal = 'ERROR: incorrect Topic value';}
 		const name     = entry.querySelector('input[name="name"]').value.trim();
-		const typeId   = parseInt(entry.querySelector('select[name="type"]').value, 10);
+		let typeId   = entry.querySelector('select[name="type"]').value;
+		logDebug(`typeId ${name} = ${typeId}`);
+		if (typeId === '') { typeId = 'ERROR: incorrect Device type';}
 		// Todo: add switchtipe value from switchtype json domoticzSwTypes
 
 		const optInput = entry.querySelector('input[name="options"]');
@@ -442,7 +464,7 @@
 		  try {
 			mapping.Options = JSON.parse(optStr);
 		  } catch (e) {
-			logDebug('Invalid options JSON, skipping:', optStr, e);
+			logDebug('Invalid options JSON, skipping:'+ optStr+ e);
 		  }
 		}
 
@@ -453,14 +475,27 @@
 			logDebug('Invalid set JSON, skipping:', setStr, e);
 		  }
 		}
-
-		mapping.Mapping = JSON.parse(mapStr);
+		if (mapStr) {
+		  try {
+			mapping.Mapping = JSON.parse(mapStr);
+		  } catch (e) {
+			mapping.Mapping = ('ERROR: Invalid mapping string');
+		  }
+		}
+		
 		mappings.push(mapping);
 	  });
 
 	  //logDebug(`new mappings=${JSON.stringify(mappings)}`);
-	  document.getElementById('output').textContent =
-		JSON.stringify({ mappings }, null, 2);
+	  // document.getElementById('output').textContent =
+	     // JSON.stringify({ mappings }, null, 2);
+		const output = JSON.stringify({ mappings }, null, 2);
+	  let highlighted = output.replace(/ERROR/g, '<span style="color:red;">ERROR</span>');
+	  if (output.includes('ERROR')) {
+		const warning = '<span style="color:red; font-weight:bold;">This output contains ERRORS! Scroll down to check.</span>\n\n';
+		highlighted = warning + highlighted;
+	  }
+	  document.getElementById('output').innerHTML = `<pre>${highlighted}</pre>`;
 	});
 
   </script>
