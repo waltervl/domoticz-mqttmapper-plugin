@@ -49,6 +49,22 @@
       font-family: monospace;
       font-size: 0.9rem;
     }
+    .help-icon {
+	  cursor: pointer;
+	  margin-left: 5px;
+	  color: #007BFF;
+	}
+
+	.help-popup {
+	  display: none;
+	  position: absolute;
+	  background: #f9f9f9;
+	  border: 1px solid #ccc;
+	  padding: 0.5rem;
+	  max-width: 300px;
+	  z-index: 100;
+	  box-shadow: 2px 2px 6px rgba(0,0,0,0.1);
+	}
     /* All  readonly inputs lightgray */
     input[readonly] {
          background-color: #eee;
@@ -185,6 +201,10 @@
 		} catch (err) {
 			return false;
 		}
+	}
+	function showHelp(id) {
+	  const popup = document.getElementById(id);
+	  popup.style.display = popup.style.display === 'block' ? 'none' : 'block';
 	}
     function enableButtons() {
       if (topicsSet.size > 0) {
@@ -359,12 +379,25 @@
 		  </div>
 		  <label>
 			options (json)
-			<input type="text" name="options" value="${data.options||''}">
+			<input type="text" name="options" placeholder='eg: EnergyMeterMode": "1"' value="${data.options||''}">
+		    <span class="help-icon" onclick="showHelp('deviceOptionsHelp-${entryCount}')">❓</span>
 		  </label>
+		  <div id="deviceOptionsHelp-${entryCount}" class="help-popup">Optional field<br> For some devices you can set options used to create the device. 
+		  <br>Eg for a kWh counter option: <i>EnergyMeterMode": "1"</i> will set energyMeterMode to "Calculated"<br>
+		  For more info see the <a href="https://github.com/FlyingDomotic/domoticz-mqttmapper-plugin?tab=readme-ov-file#device-options-partial-list" target="_blank">plugin documetation.</a></div>
 		  <label>
 			set (json)
 			<input type="text" name="set" value="${data.set||''}">
+		    <span class="help-icon" onclick="showHelp('deviceSetHelp-${entryCount}')">❓</span>
 		  </label>
+		  <div id="deviceSetHelp-${entryCount}" class="help-popup">Optional field<br>The set tag is used to push a change on Domoticz device to MQTT. <br>
+		  example: {"topic": "fan/mode/set", "payload": {"mode":"#"}, "retain": false} <br>
+		   'topic' contains the topic to send the value to (defaults to primary topic if not specified). Set it to empty to ignore SET requests without error message.
+			<br>
+			'payload' contains the payload to send (defaults to #). The # character will be replaced by translated value (Forced in this example if Domoticz devices holds 20 in its level).
+			<br>
+			'retain' indicates if message should be sent with MQTT retain flag (default to true).
+		 </div>
 		  <label>
 			nValue (numeric)
 			<input type="text" name="nValue" readonly>
@@ -374,9 +407,11 @@
 			<input type="text" name="sValue" readonly>
 		  </label>
 		  <label>
-			Mapping (payload-pad)
+			Mapping (payload-path)
 			<input type="text" name="mapping" required placeholder='example: {"item":"value"}' value="${data.mapping||''}">
+		    <span class="help-icon" onclick="showHelp('deviceMappingHelp-${entryCount}')">❓</span>
 		  </label>
+		  <div id="deviceMappingHelp-${entryCount}" class="help-popup">This is the helptext for using the mapping field of entry: ${entryCount}</div>
 		</div>
 	  `;
 
